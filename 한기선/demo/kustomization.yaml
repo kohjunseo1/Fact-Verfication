@@ -1,0 +1,13 @@
+# 로컬 클러스터(Lima k8s: kubeadm + containerd)용. 실행 방법은 README.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: fv-demo
+resources:
+  - k8s/namespace.yaml
+  - k8s/backend.yaml
+  - k8s/frontend.yaml
+configMapGenerator:  # 파일이 바뀌면 이름 뒤 해시가 바뀌어 frontend가 자동으로 다시 배포된다
+  - name: frontend-files
+    files:
+      - frontend/index.html
+      - frontend/nginx.conf

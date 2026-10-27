@@ -20,8 +20,8 @@
 # %%
 # ---- 설정 ----
 BUNDLE = "/content/drive/MyDrive/hover_bundle"
-RETRIEVAL_TAG = "B20_M5_d3_both_in3d0_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
-# 이전 설정: "B20_M5_d3_out_floor0.7"(나가는 링크만), "B20_M5_d3_both_in3_floor0.7"(모든 깊이에서 들어오는 링크)
+RETRIEVAL_TAG = "B20_M5_d3_both_in3d0_floor0.7_snt"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
+# 이전 설정: "B20_M5_d3_both_in3d0_floor0.7"(NORP 포함·the 그대로), "B20_M5_d3_out_floor0.7", "B20_M5_d3_both_in3_floor0.7"
 PER_DOC = 2                                 # 문서마다 남길 문장 수
 N_SENT = 5                                  # 전체 근거 문장 상한 (검색 노트북의 N과 같은 커널을 쓸 수 있어 이름을 구분)
 RULE = "hybrid"                             # "fixed" = 항상 상위 N_SENT개, "hybrid" = 확률 기준값 + 빈 문서 구제

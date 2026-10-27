@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="780" viewBox="0 0 1600 780" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="780" fill="#ffffff"/>
+
+  <text x="40" y="58" font-size="28" font-weight="700" fill="#0f172a">HoVer 사실 검증 파이프라인</text>
+
+  <!-- ================= ① 후보 문서 찾기 ================= -->
+  <g filter="url(#shadow)"><rect x="40" y="90" width="860" height="650" rx="18" fill="#f5f9ff" stroke="#bfdbfe"/></g>
+  <path d="M58,90 h824 a18,18 0 0 1 18,18 v30 h-860 v-30 a18,18 0 0 1 18,-18 z" fill="#2563eb"/>
+  <text x="64" y="121" font-size="19" font-weight="700" fill="#ffffff">① 후보 문서 찾기</text>
+  <text x="876" y="121" font-size="13" fill="#dbeafe" text-anchor="end">위키피디아 2017 첫 단락 · 제목 523만 · 링크 2,268만</text>
+
+  <!-- claim -->
+  <rect x="420" y="160" width="100" height="36" rx="18" fill="#0f172a"/>
+  <text x="470" y="184" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">claim</text>
+  <path d="M440,196 L265,232" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <path d="M500,196 L675,232" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+
+  <!-- NER / n-gram -->
+  <rect x="90" y="234" width="350" height="62" rx="12" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="265" y="259" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">개체 추출 (spaCy en_core_web_trf)</text>
+  <text x="265" y="282" font-size="13" fill="#475569" text-anchor="middle">DATE·숫자류 라벨 제외</text>
+  <rect x="500" y="234" width="350" height="62" rx="12" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="675" y="259" font-size="16" font-weight="700" fill="#1e3a8a" text-anchor="middle">claim n-gram ↔ 제목 사전 매칭</text>
+  <text x="675" y="282" font-size="13" fill="#475569" text-anchor="middle">개체 추출이 놓친 개체 보완</text>
+  <path d="M265,296 L420,350" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <path d="M675,296 L520,350" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+
+  <!-- decision -->
+  <polygon points="350,372 470,328 590,372 470,416" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="470" y="368" font-size="14" font-weight="700" fill="#1e3a8a" text-anchor="middle">제목 리스트에서</text>
+  <text x="470" y="387" font-size="14" font-weight="700" fill="#1e3a8a" text-anchor="middle">확인</text>
+
+  <!-- left: matched -->
+  <path d="M350,372 H230 V462" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+  <text x="240" y="398" font-size="13" fill="#1d4ed8">정확 일치</text>
+  <text x="240" y="417" font-size="13" fill="#1d4ed8">소문자·괄호 제거 일치</text>
+
+  <!-- right: embedding -->
+  <path d="M590,372 H622" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="606" y="360" font-size="12" fill="#475569" text-anchor="middle">없음</text>
+  <rect x="624" y="344" width="236" height="56" rx="12" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="742" y="368" font-size="15" font-weight="700" fill="#1e3a8a" text-anchor="middle">제목 임베딩 검색</text>
+  <text x="742" y="389" font-size="12" fill="#475569" text-anchor="middle">가장 비슷한 제목</text>
+  <path d="M690,400 V488 H372" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+  <text x="560" y="478" font-size="13" fill="#1d4ed8">유사도 ≥ 0.70</text>
+  <path d="M810,400 V436" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#ag)"/>
+  <text x="818" y="424" font-size="12" fill="#94a3b8">미만</text>
+  <rect x="770" y="438" width="80" height="32" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="810" y="459" font-size="13" fill="#94a3b8" text-anchor="middle">버림</text>
+
+  <!-- seeds -->
+  <rect x="90" y="464" width="280" height="50" rx="25" fill="#2563eb"/>
+  <text x="230" y="495" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">시작 후보 문서</text>
+  <path d="M230,514 V552" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+
+  <!-- best-first -->
+  <rect x="90" y="554" width="610" height="160" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="114" y="584" font-size="17" font-weight="700" fill="#1e3a8a">best-first 링크 탐색</text>
+  <text x="114" y="584" dx="190" font-size="13" fill="#64748b">첫 단락 링크 그래프</text>
+  <g font-size="13.5" fill="#334155">
+    <circle cx="120" cy="608" r="3" fill="#2563eb"/>
+    <text x="132" y="613">점수 = cos(링크 문서 첫 문단, claim + 직전 문서 첫 문단)</text>
+    <circle cx="120" cy="634" r="3" fill="#2563eb"/>
+    <text x="132" y="639">큐 우선순위 = 경로 평균 점수 → 가장 높은 문서부터 열기</text>
+    <circle cx="120" cy="660" r="3" fill="#2563eb"/>
+    <text x="132" y="665">최대 깊이 3 · 이미 연 문서 제외</text>
+    <circle cx="120" cy="686" r="3" fill="#2563eb"/>
+    <text x="132" y="691">이웃: 나가는 링크 상위 5개 + 시작 문서로 들어오는 링크 상위 3개</text>
+  </g>
+
+  <!-- output -->
+  <path d="M700,634 H726" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+  <rect x="728" y="608" width="150" height="52" rx="26" fill="#1d4ed8"/>
+  <text x="803" y="640" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">후보 문서 20개</text>
+  <text x="803" y="684" font-size="12" fill="#64748b" text-anchor="middle">20개 열람 또는</text>
+  <text x="803" y="701" font-size="12" fill="#64748b" text-anchor="middle">큐가 비면 종료</text>
+
+
+  <!-- ================= ② 근거 문장 고르기 ================= -->
+  <g filter="url(#shadow)"><rect x="940" y="90" width="300" height="650" rx="18" fill="#f3fcf8" stroke="#a7f3d0"/></g>
+  <path d="M958,90 h264 a18,18 0 0 1 18,18 v30 h-300 v-30 a18,18 0 0 1 18,-18 z" fill="#059669"/>
+  <text x="964" y="121" font-size="19" font-weight="700" fill="#ffffff">② 근거 문장 고르기</text>
+
+  <g transform="translate(0,-40)">
+  <rect x="956" y="200" width="268" height="88" rx="12" fill="#ffffff" stroke="#6ee7b7" stroke-width="1.5"/>
+  <text x="1090" y="228" font-size="16" font-weight="700" fill="#065f46" text-anchor="middle">cross-encoder</text>
+  <text x="1090" y="252" font-size="13" fill="#475569" text-anchor="middle">후보 문서의 모든 문장마다</text>
+  <text x="1090" y="272" font-size="13" fill="#475569" text-anchor="middle">claim–문장 근거 확률</text>
+  <path d="M1090,288 V326" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#a)"/>
+
+  <rect x="956" y="328" width="268" height="172" rx="12" fill="#ffffff" stroke="#6ee7b7" stroke-width="1.5"/>
+  <text x="1090" y="356" font-size="16" font-weight="700" fill="#065f46" text-anchor="middle">선택 규칙</text>
+  <g font-size="13" fill="#334155">
+    <circle cx="976" cy="380" r="3" fill="#059669"/><text x="986" y="385">확률 ≥ 기준값인 문장</text>
+    <circle cx="976" cy="406" r="3" fill="#059669"/><text x="986" y="411">문서당 최대 2 · 전체 최대 5</text>
+    <circle cx="976" cy="432" r="3" fill="#059669"/><text x="986" y="437">한 문장도 없는 문서는</text>
+    <text x="986" y="456">가장 높은 1문장 구제</text>
+    <circle cx="976" cy="476" r="3" fill="#059669"/><text x="986" y="481">기준값: train 교차 예측으로 결정</text>
+  </g>
+  <path d="M1090,500 V538" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <rect x="990" y="540" width="200" height="50" rx="25" fill="#059669"/>
+  <text x="1090" y="571" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">근거 문장</text>
+  </g>
+
+
+  <!-- ================= ③ 판정 ================= -->
+  <g filter="url(#shadow)"><rect x="1280" y="90" width="280" height="650" rx="18" fill="#f8f5ff" stroke="#ddd6fe"/></g>
+  <path d="M1298,90 h244 a18,18 0 0 1 18,18 v30 h-280 v-30 a18,18 0 0 1 18,-18 z" fill="#7c3aed"/>
+  <text x="1304" y="121" font-size="19" font-weight="700" fill="#ffffff">③ 판정</text>
+
+  <g transform="translate(0,-40)">
+  <rect x="1296" y="200" width="248" height="156" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="1420" y="228" font-size="16" font-weight="700" fill="#5b21b6" text-anchor="middle">BERT-base 검증 모델</text>
+  <text x="1420" y="250" font-size="13" fill="#475569" text-anchor="middle">HoVer 공식 학습 설정</text>
+  <rect x="1314" y="266" width="212" height="72" rx="8" fill="#f5f3ff"/>
+  <g font-size="13" fill="#6d28d9" text-anchor="middle" font-family="Consolas,'D2Coding',monospace">
+    <text x="1420" y="290">[CLS] claim</text>
+    <text x="1420" y="309">[SEP] 근거 문장</text>
+    <text x="1420" y="328">[SEP]</text>
+  </g>
+  <path d="M1420,356 V396" stroke="#7c3aed" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <rect x="1320" y="398" width="200" height="46" rx="23" fill="#16a34a"/>
+  <text x="1420" y="427" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">SUPPORTED</text>
+  <rect x="1320" y="454" width="200" height="46" rx="23" fill="#dc2626"/>
+  <text x="1420" y="483" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">NOT_SUPPORTED</text>
+  </g>
+
+  <!-- arrows between stages (drawn last so panels do not cover them) -->
+  <path d="M878,634 H918 V204 H954" stroke="#64748b" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <path d="M1190,525 H1260 V204 H1294" stroke="#64748b" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+</svg>

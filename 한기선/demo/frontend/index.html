@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2-hop 사실 검증</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e4e4e0;
+    --accent: #2f5bd3; --ok: #1f8a4c; --ok-bg: #e6f4ec; --bad: #c2412d; --bad-bg: #fbeae6; --bar: #dfe6fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --card: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
+      --accent: #7c9cf5; --ok: #5cc98a; --ok-bg: #16301f; --bad: #f08a73; --bad-bg: #3a1d17; --bar: #27304a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+  textarea { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  button { font: inherit; border-radius: 8px; cursor: pointer; }
+  #run { background: var(--accent); color: #fff; border: 0; padding: 8px 18px; font-weight: 600; }
+  #run:disabled { opacity: .5; cursor: wait; }
+  .ex { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 4px 10px; font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ex:hover { color: var(--text); border-color: var(--muted); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .verdict { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .badge { font-weight: 700; font-size: 18px; padding: 6px 14px; border-radius: 8px; }
+  .badge.ok { color: var(--ok); background: var(--ok-bg); }
+  .badge.bad { color: var(--bad); background: var(--bad-bg); }
+  .meter { flex: 1; min-width: 180px; }
+  .track { height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; background: var(--accent); }
+  h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; }
+  h2 .step { color: var(--accent); font-variant-numeric: tabular-nums; }
+  ol, ul { margin: 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .score { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; margin-left: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 13px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; }
+  .chip.on { border-color: var(--accent); color: var(--accent); }
+  .path { font-size: 14px; }
+  .path b { font-weight: 600; }
+  .ev { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; }
+  .ev .t { font-size: 13px; color: var(--accent); }
+  .err { color: var(--bad); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>2-hop 사실 검증</h1>
+  <p class="sub">영어 주장(claim)을 입력하면 위키피디아에서 근거를 찾아 SUPPORTED / NOT_SUPPORTED를 판정합니다. (HoVer 2-hop 베이스라인)</p>
+
+  <div class="card">
+    <textarea id="claim" placeholder="예: The team coached by someone with the nickname &quot;Coach K&quot; play at Cameron Indoor Stadium."></textarea>
+    <div class="row">
+      <button id="run">검증</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <div class="row" id="examples"></div>
+  </div>
+
+  <div id="out"></div>
+</main>
+<script>
+const EXAMPLES = [
+  'The team coached by someone with the nickname "Coach K" play at Cameron Indoor Stadium.',
+  'Skagen Painter Peder Severin Krøyer favored naturalism along with Theodor Esbern Philipsen and Kristian Zahrtmann.',
+  'Monsters, Inc. Mike & Sulley to the Rescue! is based on an animated movie made by a company that was purchased by Disney for $7.4 billion.',
+  'The puzzle compendium "Fires of Winter" reached the "New York Times" bestseller list.',
+];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const wiki = t => `https://en.wikipedia.org/wiki/${encodeURIComponent(t.replace(/ /g, '_'))}`;
+const pct = x => (x * 100).toFixed(1) + '%';
+
+for (const c of EXAMPLES) {
+  const b = document.createElement('button');
+  b.className = 'ex'; b.textContent = c; b.title = c;
+  b.onclick = () => { $('claim').value = c; run(); };
+  $('examples').append(b);
+}
+$('run').onclick = run;
+$('claim').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run(); });
+
+async function run() {
+  const claim = $('claim').value.trim();
+  if (!claim) return;
+  $('run').disabled = true;
+  $('status').textContent = '검색하고 판정하는 중… (CPU라 수십 초 걸릴 수 있어요)';
+  $('out').innerHTML = '';
+  try {
+    const r = await fetch('/api/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    render(data);
+    $('status').textContent = `완료 · ${(data.latency_ms / 1000).toFixed(1)}초`;
+  } catch (e) {
+    $('out').innerHTML = `<div class="card err">오류: ${esc(e.message)}</div>`;
+    $('status').textContent = '';
+  } finally {
+    $('run').disabled = false;
+  }
+}
+
+function render(d) {
+  const ok = d.label === 'SUPPORTED';
+  const docs = new Set(d.docs);
+  const t = d.timing;
+  $('out').innerHTML = `
+    <div class="card verdict">
+      <span class="badge ${ok ? 'ok' : 'bad'}">${d.label}</span>
+      <div class="meter">
+        <div class="muted">SUPPORTED 확률 ${pct(d.prob_supported)}</div>
+        <div class="track"><div class="fill" style="width:${pct(d.prob_supported)}"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">4</span> 근거 문장 top-${d.evidence.length} <span class="score">문장 선택 ${t.sentence}s · 판정 ${t.verify}s</span></h2>
+      ${d.evidence.map(e => `
+        <div class="ev"><div class="t"><a href="${wiki(e.title)}" target="_blank" rel="noopener">${esc(e.title)}</a> · 문장 ${e.sid}<span class="score">${e.score.toFixed(3)}</span></div>${esc(e.sent)}</div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h2><span class="step">3</span> Multi-hop 경로 (hop 1 → hop 2) <span class="score">후보 ${d.n_hop2_pairs}쌍 · ${t.hop2}s</span></h2>
+      <ol>${d.paths.map(p => `<li class="path"><b>${esc(p.hop1)}</b> → <b>${esc(p.hop2)}</b><span class="score">${p.score.toFixed(3)}</span></li>`).join('') || '<li class="muted">경로 없음</li>'}</ol>
+      <p class="muted" style="margin:10px 0 0">문장을 고를 문서 ${d.docs.length}개: ${d.docs.map(esc).join(', ')}</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">2</span> 문서 재정렬 top-${d.reranked.length} <span class="score">${t.rerank}s</span></h2>
+      <ol>${d.reranked.map(r => `<li>${esc(r.title)}<span class="score">${r.score.toFixed(3)}</span></li>`).join('')}</ol>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">1</span> BM25 후보 ${d.bm25.length}개 <span class="score">${t.bm25}s</span></h2>
+      <div class="chips">${d.bm25.map(b => `<span class="chip ${docs.has(b) ? 'on' : ''}">${esc(b)}</span>`).join('')}</div>
+      <p class="muted" style="margin:8px 0 0">파란 테두리 = 최종 문서 5개에 들어간 문서</p>
+    </div>`;
+}
+</script>
+</body>
+</html>

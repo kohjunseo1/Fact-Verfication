@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # 노드 하나에 백엔드가 둘 들어갈 CPU가 없어서, 옛 Pod를 먼저 끄고 새로 띄운다
+  selector:
+    matchLabels: {app: backend}
+  template:
+    metadata:
+      labels: {app: backend}
+    spec:
+      containers:
+        - name: backend
+          image: fv-backend:dev
+          imagePullPolicy: Never  # 노드의 containerd(k8s.io 네임스페이스)에 직접 빌드한 이미지를 쓴다
+          ports:
+            - containerPort: 8000
+          env:
+            - {name: WIKI_DB, value: /data/raw/wiki_wo_links.db}
+            - {name: INDEX_DB, value: /data/index/wiki_index.db}
+            - {name: MODEL_DIR, value: /data/models}
+          volumeMounts:
+            - {name: data, mountPath: /data, readOnly: true}
+          startupProbe:  # 모델 4개를 메모리에 올리는 데 시간이 걸린다
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: "2", memory: 3Gi}
+            limits: {memory: 5Gi}
+      volumes:
+        # ponytail: 로컬 VM에 마운트한 호스트 폴더(한기선/data)를 그대로 쓴다. 클라우드 클러스터에서는 PVC + initContainer로 바꾼다
+        - name: data
+          hostPath: {path: /mnt/fv/data, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector: {app: backend}
+  ports:
+    - port: 8000

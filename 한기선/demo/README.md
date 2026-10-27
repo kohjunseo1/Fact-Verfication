@@ -37,7 +37,7 @@ kubectl apply -k 한기선/demo
 kubectl -n fv-demo port-forward svc/frontend 8080:80   # → http://localhost:8080
 ```
 
-코드를 바꾼 뒤: 백엔드는 다시 빌드하고 `kubectl -n fv-demo rollout restart deploy/backend`, 프론트는 `kubectl apply -k` 만 하면 된다.
+코드는 VM에 마운트된 호스트 폴더에서 바로 읽는다. `index.html`은 저장 후 새로고침, `.py`는 저장하면 uvicorn이 알아서 다시 띄운다(모델 로딩 동안 배지가 "연결 끊김"). 다시 할 일은 두 경우뿐이다: `requirements.txt`·`Containerfile`을 바꾸면 이미지 빌드 + `rollout restart deploy/backend`, `nginx.conf`·매니페스트를 바꾸면 `kubectl apply -k`.
 
 정리: `kubectl delete -k 한기선/demo`, VM 끄기 `limactl stop k8s`.
 

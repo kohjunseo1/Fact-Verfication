@@ -1,6 +1,7 @@
 # 팀 공통 모델 컨테이너 규격: POST /predict {claim} → {label, evidence, latency_ms}, GET /health, GET /info
 import itertools
 import json
+import os
 import time
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import pipeline
+import torch
 
 app = FastAPI(title='HoVer 2-hop fact verification')
 
@@ -27,6 +29,9 @@ def info():
         'name': 'hangiseon-2hop-baseline',
         'pipeline': 'BM25(FTS5) → roberta 문서 재정렬 → hop2 경로 점수 → roberta 문장 선택 → roberta 검증기',
         'models': list(pipeline.models),
+        'colab': 'COLAB_RELEASE_TAG' in os.environ,  # Colab 런타임에만 있는 환경 변수
+        'device': pipeline.DEVICE,
+        'gpu': torch.cuda.get_device_name() if pipeline.DEVICE == 'cuda' else None,
         'params': {'k_cand': pipeline.K_CAND, 'hop1': pipeline.B, 'k_doc': pipeline.K_DOC, 'k_sent': pipeline.K_SENT},
     }
 

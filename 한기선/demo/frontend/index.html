@@ -66,11 +66,39 @@
   details pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 6px 0 0; font: 12px/1.5 ui-monospace, Menlo, monospace; }
   .err { color: var(--bad); }
   a { color: var(--accent); }
+  .head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 4px; }
+  .head h1 { margin: 0; }
+  .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .conn.ok { color: var(--ok); border-color: var(--ok); }
+  .conn.ok::before { background: var(--ok); }
+  .conn.warn { color: var(--text); }
+  .conn.warn::before { background: #d39b22; }
+  .conn.bad { color: var(--bad); border-color: var(--bad); }
+  .conn.bad::before { background: var(--bad); }
+  /* 결과를 기다리는 동안의 애니메이션 */
+  .wait { position: relative; height: 56px; margin-top: 4px; overflow: hidden; }
+  .docs-anim { display: flex; gap: 10px; align-items: center; width: 290px; }
+  .docs-anim i { flex: none; width: 30px; height: 38px; padding: 6px 5px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--card) repeating-linear-gradient(transparent 0 6px, var(--bar) 6px 8px) content-box; animation: pick 1.75s infinite; }
+  .lens { position: absolute; top: 4px; left: 0; width: 24px; height: 24px; border: 3px solid var(--accent); border-radius: 50%; animation: scan 1.75s linear infinite; }
+  .lens::after { content: ''; position: absolute; width: 3px; height: 12px; background: var(--accent); right: -6px; bottom: -11px; transform: rotate(-45deg); }
+  @keyframes scan { from { transform: translateX(0); } to { transform: translateX(280px); } }
+  @keyframes pick { 0%, 30%, 100% { transform: none; border-color: var(--line); } 10% { transform: translateY(-6px); border-color: var(--accent); } }
+  .reel { animation: roll 3s linear infinite; }
+  .reel i { display: block; height: 6px; margin: 0 0 12px 10px; border-radius: 3px; background: var(--bar); }
+  .win { position: absolute; left: 0; right: 0; top: 19px; height: 18px; border: 2px solid var(--accent); border-radius: 6px; }
+  @keyframes roll { to { transform: translateY(-50%); } }
+  .scale { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; }
+  .rail { position: relative; flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--bad), var(--ok)); }
+  .rail i { position: absolute; top: -6px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%; background: var(--card); border: 3px solid var(--text); animation: sway 3.2s ease-in-out infinite; }
+  @keyframes sway { 0%, 100% { left: 50%; } 20% { left: 15%; } 45% { left: 80%; } 65% { left: 30%; } 85% { left: 65%; } }
+  @media (prefers-reduced-motion: reduce) { .wait * { animation-duration: 8s !important; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>2-hop 사실 검증</h1>
+  <div class="head"><h1>2-hop 사실 검증</h1><span id="conn" class="conn" role="status">서버 확인 중…</span></div>
   <p class="sub">영어 주장(claim)을 입력하면 위키피디아에서 근거를 찾아 SUPPORTED / NOT_SUPPORTED를 판정합니다. (HoVer 2-hop, v3 파이프라인 · test 1,126건: 문서 all-hit@5 87.5%, macro-F1 0.728, HoVer score 0.579)</p>
 
   <div class="card">
@@ -91,19 +119,64 @@ const EXAMPLES = [
   'Skagen Painter Peder Severin Krøyer favored naturalism along with Theodor Esbern Philipsen and Kristian Zahrtmann.',
   'Monsters, Inc. Mike & Sulley to the Rescue! is based on an animated movie made by a company that was purchased by Disney for $7.4 billion.',
   'The puzzle compendium "Fires of Winter" reached the "New York Times" bestseller list.',
+  // 아래는 HoVer test에서 v3가 문서·판정 모두 맞힌 주장
+  'Summer Holiday starred David Kossoff who won a BAFTA in 1954.',
+  'Dead-cakes are often eaten at a gathering held before a funeral.',
+  'Vladimir Igorevich Arnold died after Georg Cantor.',
+  'The recording sessions took place for the Michael Jackson hit "Beat It" at Westlake Recording Studios in Los Angeles.',
+  'Days of the New and TV on the Radio are not from New York.',
+  'The American retailer-owned cooperative True Value sponsors the International Race of Champions.',
+  'Phacelia and Nymphaea are both types of plants.',
+  'Befikra and Aditi Singh Sharma are both Indian.',
+  'Stronger Together was used for the campaign comprised of the Vice Presidential candidate who was a Senator from Virginia.',
+  'English Mastiff is bigger than Griffon Bruxellois.',
+  'There were 331 episodes of the TV series where Julianna Margulies had the role of Carol Hathaway.',
+  'Ashley Burch is known for voicing Aloy in a video game released in 2017.',
+  'Nell Gwyn, the long-time mistress of King Charles II of Victoria occupied a townhouse in Pall Mall, London.',
+  'The Mexican singer Gloria Trevi never released the song Todos Me Miran.',
+  'British rock band, Slade, is responsible for bolstering Quiet Riot\'s top-five hit "Mental Health".',
+  'FC Barcelona ambassador Ronaldinho won the French national Ballon d\'Or in addition to FIFA World Player of the Year.',
+  'David Simon created and mostly loved the show that Idris Akuna Elba played Stringer Bell in.',
+  'Irish actress, Valene Kane, starred in War Games: At the End of the Day in 1988.',
+  'Josue Larose is a climate change organizer from Deerfield Beach in Broward County, Florida.',
+  'William Zabka, who was born on the rainy night of October 21, 1965, stars in the 2014 American drama film Where Hope Grows.',
+  'Completely Serious and Daniel Tosh have improvised comedy in common.',
 ];
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const wiki = t => `https://en.wikipedia.org/wiki/${encodeURIComponent(t.replace(/ /g, '_'))}`;
 const pct = x => (x * 100).toFixed(1) + '%';
 
-for (const c of EXAMPLES) {
+// 열 때마다 섞어서 5개만 보여준다
+for (let i = EXAMPLES.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [EXAMPLES[i], EXAMPLES[j]] = [EXAMPLES[j], EXAMPLES[i]];
+}
+for (const c of EXAMPLES.slice(0, 5)) {
   const b = document.createElement('button');
   b.className = 'ex'; b.textContent = c; b.title = c;
   b.onclick = () => { $('claim').value = c; run(); };
   $('examples').append(b);
 }
 $('run').onclick = run;
+
+// 백엔드가 어디서 돌고 있는지 15초마다 확인한다 (Colab GPU / CPU / 끊김)
+async function checkConn() {
+  const el = $('conn');
+  try {
+    const r = await fetch('/api/info', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(r.status);
+    const i = await r.json();
+    const where = i.colab ? 'Colab' : '서버';
+    el.className = 'conn ' + (i.device === 'cuda' ? 'ok' : 'warn');
+    el.textContent = i.device === 'cuda' ? `${where} GPU 연결됨 · ${i.gpu}` : `${where} CPU로 실행 중 (느림)`;
+  } catch {
+    el.className = 'conn bad';
+    el.textContent = '서버 연결 끊김';
+  }
+}
+checkConn();
+setInterval(checkConn, 15000);
 $('claim').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run(); });
 
 async function run() {
@@ -149,13 +222,24 @@ const flow = (inputs, model, out, rule = false) =>
 const bar = x => `<span class="mbar"><span style="width:${pct(x)}"></span></span>`;
 const sc = x => `<span class="score">${x.toFixed(3)}</span>${bar(x)}`;
 
+const CHIPS = 12;  // BM25 후보는 앞의 이만큼만 펼쳐 보여준다
 const STEPS = { bm25: 'BM25 후보 검색', rerank: '문서 재정렬', hop2: 'hop 2 검색', sentence: '근거 문장 선택', verify: '판정' };
+
+// 문서 찾기 → 돋보기가 문서를 훑음, 문장 찾기 → 문장이 지나감, 판정 → 저울 눈금이 왔다갔다
+const docsWait = `<div class="wait"><div class="docs-anim">${[...Array(7)].map((_, i) => `<i style="animation-delay:${i * 0.25}s"></i>`).join('')}</div><span class="lens"></span></div>`;
+const sentWait = `<div class="wait"><div class="reel">${[...Array(2)].map(() => [72, 55, 88, 40, 66, 80, 50, 60].map(w => `<i style="width:${w}%"></i>`).join('')).join('')}</div><div class="win"></div></div>`;
+const WAIT = {
+  bm25: docsWait, rerank: docsWait, hop2: docsWait, sentence: sentWait,
+  verify: `<div class="wait scale"><span style="color:var(--bad)">NOT_SUPPORTED</span><div class="rail"><i></i></div><span style="color:var(--ok)">SUPPORTED</span></div>`,
+};
 
 function render(d) {
   const t = d.timing;
   const docs = new Set(d.docs || []);
   const cards = [];
   const p1 = d.prob_supported, p0 = 1 - p1;
+  const chip = b => `<span class="chip ${docs.has(b) ? 'on' : ''}">${esc(b)}</span>`;
+  const moreOpen = $('more-bm25')?.open;  // 다시 그려도 펼친 상태 유지
 
   if ('verify' in t) cards.push(`
     <div class="card verdict">
@@ -167,16 +251,18 @@ function render(d) {
     </div>`);
 
   if ('bm25' in t) cards.push(`
-    <div class="card">
+    <div class="card" data-s="bm25">
       <h2><span class="step">1</span> BM25 후보 ${d.bm25.length}개 <span class="score">${t.bm25}s</span></h2>
       ${flow(['주장의 단어'], 'BM25 (학습 없음)', `위키 문서 ${d.bm25.length}개`, true)}
       <p class="how">위키 520만 문서에서 주장의 단어가 많이, 드물게 겹치는 문서일수록 위로. 뜻은 보지 않고 글자만 맞춘다. (평가 때는 HoVer 저자가 공개한 TF-IDF top-100을 썼고, 새 주장에는 그 목록이 없어서 BM25로 대신한다)</p>
-      <div class="chips">${d.bm25.map(b => `<span class="chip ${docs.has(b) ? 'on' : ''}">${esc(b)}</span>`).join('')}</div>
+      <div class="chips">${d.bm25.slice(0, CHIPS).map(chip).join('')}</div>
+      ${d.bm25.length > CHIPS ? `<details id="more-bm25" ${moreOpen ? 'open' : ''}><summary>나머지 ${d.bm25.length - CHIPS}개 보기</summary>
+        <div class="chips">${d.bm25.slice(CHIPS).map(chip).join('')}</div></details>` : ''}
       ${docs.size ? '<p class="muted" style="margin:8px 0 0">파란 테두리 = 최종 문서 5개에 들어간 문서</p>' : ''}
     </div>`);
 
   if ('rerank' in t) cards.push(`
-    <div class="card">
+    <div class="card" data-s="rerank">
       <h2><span class="step">2</span> 문서 재정렬 top-${d.reranked.length} <span class="score">${t.rerank}s</span></h2>
       ${flow(['주장', '문서 제목 + 본문 앞부분'], 'doc_rerank', 'P(관련 문서)')}
       <p class="how">후보 ${d.bm25.length}개 전부를 하나씩 주장과 같이 읽고 "주장에 필요한 문서일 확률"을 매긴다. 문서끼리 경쟁하지 않아 합이 1이 아니다.</p>
@@ -184,7 +270,7 @@ function render(d) {
     </div>`);
 
   if ('hop2' in t) cards.push(`
-    <div class="card">
+    <div class="card" data-s="hop2">
       <h2><span class="step">3</span> Multi-hop 경로 (hop 1 → hop 2) <span class="score">후보 ${d.n_hop2_pairs}쌍 · ${t.hop2}s</span></h2>
       ${flow(['주장 | hop 1 문서', 'hop 2 후보 문서'], 'hop2', 'P(이어지는 문서)')}
       <p class="how">2단계 상위 2개 문서가 hop 1. 그 본문과 주장에 나온 위키 제목을 hop 2 후보로 모아(주장에 이름이 없는 문서도 찾는다) hop 1을 조건으로 채점. 경로 점수 = P(hop 1) × P(hop 2 | hop 1).</p>
@@ -194,7 +280,7 @@ function render(d) {
     </div>`);
 
   if ('sentence' in t) cards.push(`
-    <div class="card">
+    <div class="card" data-s="sentence">
       <h2><span class="step">4</span> 근거 문장 top-${d.evidence.length} <span class="score">후보 ${d.n_sents}문장 · ${t.sentence}s</span></h2>
       ${flow(['주장', '문서 제목. 문장 하나'], 'sent_select', 'P(근거 문장)')}
       <p class="how">위 문서 ${d.docs.length}개의 문장 ${d.n_sents}개를 하나씩 채점. 서로 다른 문서의 1위 문장을 먼저 넣고 나머지는 점수 순.</p>
@@ -203,7 +289,7 @@ function render(d) {
     </div>`);
 
   if ('verify' in t) cards.push(`
-    <div class="card">
+    <div class="card" data-s="verify">
       <h2><span class="step">5</span> 판정 <span class="score">${t.verify}s</span></h2>
       ${flow(['주장', `근거 ${d.evidence.length}문장 이어 붙임`], 'verifier', '두 칸 확률 → 큰 쪽')}
       <p class="how">근거를 한꺼번에 읽고 두 칸에 점수를 매긴다. 두 칸이 경쟁하므로 합이 1.</p>
@@ -220,9 +306,11 @@ function render(d) {
 
   // 다음에 돌고 있는 단계
   const keys = Object.keys(STEPS), next = keys.find(k => !(k in t));
-  if (next) cards.push(`<div class="card pending muted"><h2><span class="step">${keys.indexOf(next) + 1}</span> ${STEPS[next]} 중…</h2></div>`);
+  if (next) cards.push(`<div class="card pending muted"><h2><span class="step">${keys.indexOf(next) + 1}</span> ${STEPS[next]} 중…</h2>${WAIT[next]}</div>`);
 
   $('out').innerHTML = cards.join('');
+  // 방금 끝난 단계의 결과로 스크롤
+  $('out').querySelector(`[data-s="${d.stage}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
 </body>

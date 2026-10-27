@@ -16,6 +16,9 @@ spec:
         - name: backend
           image: fv-backend:dev
           imagePullPolicy: Never  # 노드의 containerd(k8s.io 네임스페이스)에 직접 빌드한 이미지를 쓴다
+          # 이미지는 라이브러리만 쓰고 코드는 호스트 폴더에서 읽는다. .py를 저장하면 uvicorn이 다시 띄운다(모델 로딩만큼 걸림)
+          command: [uvicorn, app:app, --host, 0.0.0.0, --port, "8000", --reload]
+          workingDir: /app
           ports:
             - containerPort: 8000
           env:
@@ -24,6 +27,7 @@ spec:
             - {name: MODEL_DIR, value: /data/models}
           volumeMounts:
             - {name: data, mountPath: /data, readOnly: true}
+            - {name: code, mountPath: /app, readOnly: true}
           startupProbe:  # 모델 4개를 메모리에 올리는 데 시간이 걸린다
             httpGet: {path: /health, port: 8000}
             periodSeconds: 5
@@ -38,6 +42,8 @@ spec:
         # ponytail: 로컬 VM에 마운트한 호스트 폴더(한기선/data)를 그대로 쓴다. 클라우드 클러스터에서는 PVC + initContainer로 바꾼다
         - name: data
           hostPath: {path: /mnt/fv/data, type: Directory}
+        - name: code
+          hostPath: {path: /mnt/fv/demo/backend, type: Directory}
 ---
 apiVersion: v1
 kind: Service

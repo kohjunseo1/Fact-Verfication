@@ -20,6 +20,7 @@ INDEX_DB = os.environ.get('INDEX_DB', '/data/wiki_index.db')
 MODEL_DIR = os.environ.get('MODEL_DIR', '/models')
 LABELS = ['NOT_SUPPORTED', 'SUPPORTED']
 K_CAND, B, K_DOC, K_SENT = 20, 2, 5, 5  # 05 재정렬 후보 수, 08 hop 1 문서 수, 06 문서 수, 07 근거 문장 수
+N_DIV = 2  # 06: 서로 다른 문서 N_DIV개의 1위 문장을 맨 앞에 둔다
 BATCH = 32
 
 nfc = lambda s: unicodedata.normalize('NFC', s)
@@ -138,13 +139,18 @@ def verify(claim):
         pairs = [(a, sa, c) for a, sa in reranked[:B] for c in (mentioned_titles(claim) | doc_mentions(a)) - {a}]
         s2 = score('hop2', [f'{claim} | {nfc(a)}. {nfc(doc_text(a))}' for a, _, _ in pairs],
                    [f'{nfc(c)}. {nfc(doc_text(c))}' for _, _, c in pairs], 256)
-        paths = sorted(((sa * p, a, c) for (a, sa, c), p in zip(pairs, s2)), key=lambda x: -x[0])
-        docs = merge([(a, c) for _, a, c in paths], [d for d, _ in reranked])[:K_DOC]
+        paths = sorted(((sa * p, a, c, sa, p) for (a, sa, c), p in zip(pairs, s2)), key=lambda x: -x[0])
+        docs = merge([(a, c) for _, a, c, _, _ in paths], [d for d, _ in reranked])[:K_DOC]
         lap('hop2')
 
         sents = [(d, i, s) for d in docs for i, s in enumerate(split_sents(doc_text(d)))]
         s3 = score('sent_select', [claim] * len(sents), [f'{nfc(d)}. {s}' for d, _, s in sents], 128)
-        top = sorted(zip(sents, s3), key=lambda x: -x[1])[:K_SENT]
+        ranked = sorted(zip(sents, s3), key=lambda x: -x[1])
+        best = {}
+        for x in ranked:
+            best.setdefault(x[0][0], x)  # 문서별 1위 문장, 점수 순
+        first = list(best.values())[:N_DIV]
+        top = (first + [x for x in ranked if x not in first])[:K_SENT]
         lap('sentence')
 
         tok, model = models['verifier']
@@ -159,9 +165,12 @@ def verify(claim):
         'prob_supported': round(p[1], 4),
         'bm25': [nfc(d) for d in cands],
         'reranked': [{'title': nfc(d), 'score': round(s, 4)} for d, s in reranked[:K_DOC]],
-        'paths': [{'hop1': nfc(a), 'hop2': nfc(c), 'score': round(s, 4)} for s, a, c in paths[:5]],
+        'paths': [{'hop1': nfc(a), 'hop2': nfc(c), 'score': round(s, 4), 'p_hop1': round(sa, 4), 'p_link': round(pl, 4)}
+                  for s, a, c, sa, pl in paths[:5]],
         'n_hop2_pairs': len(pairs),
         'docs': [nfc(d) for d in docs],
-        'evidence': [{'title': nfc(d), 'sid': i, 'sent': nfc(s), 'score': round(sc, 4)} for (d, i, s), sc in top],
+        'n_sents': len(sents),
+        'evidence': [{'title': nfc(d), 'sid': i, 'sent': nfc(s), 'score': round(sc, 4),
+                      'first': ((d, i, s), sc) in first} for (d, i, s), sc in top],
         'timing': timing,
     }

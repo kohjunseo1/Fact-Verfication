@@ -19,9 +19,10 @@ WIKI_DB = os.environ.get('WIKI_DB', '/data/wiki_wo_links.db')
 INDEX_DB = os.environ.get('INDEX_DB', '/data/wiki_index.db')
 MODEL_DIR = os.environ.get('MODEL_DIR', '/models')
 LABELS = ['NOT_SUPPORTED', 'SUPPORTED']
-K_CAND, B, K_DOC, K_SENT = 20, 2, 5, 5  # 05 재정렬 후보 수, 08 hop 1 문서 수, 06 문서 수, 07 근거 문장 수
+K_CAND, B, K_DOC, K_SENT = 100, 2, 5, 5  # 05 재정렬 후보 수 (v3: 100개 전부 재정렬), 08 hop 1 문서 수, 06 문서 수, 07 근거 문장 수
 N_DIV = 2  # 06: 서로 다른 문서 N_DIV개의 1위 문장을 맨 앞에 둔다
 BATCH = 32
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'  # Colab GPU에서 띄우면 GPU, k8s(CPU)에서는 CPU
 
 nfc = lambda s: unicodedata.normalize('NFC', s)
 con = sqlite3.connect(f'file:{INDEX_DB}?mode=ro', uri=True, check_same_thread=False)
@@ -32,7 +33,8 @@ lock = threading.Lock()
 models = {}
 for name in ['doc_rerank', 'hop2', 'sent_select', 'verifier']:
     path = f'{MODEL_DIR}/{name}'
-    models[name] = (AutoTokenizer.from_pretrained(path), AutoModelForSequenceClassification.from_pretrained(path).eval())
+    models[name] = (AutoTokenizer.from_pretrained(path), AutoModelForSequenceClassification.from_pretrained(
+        path, dtype=torch.float16 if DEVICE == 'cuda' else torch.float32).to(DEVICE).eval())
 
 
 @torch.inference_mode()
@@ -42,7 +44,7 @@ def score(name, first, second, max_len, truncation=True):
     out = []
     for i in range(0, len(first), BATCH):
         enc = tok(first[i:i + BATCH], second[i:i + BATCH], truncation=truncation, max_length=max_len,
-                  padding=True, return_tensors='pt')
+                  padding=True, return_tensors='pt').to(DEVICE)
         out += model(**enc).logits.softmax(-1)[:, 1].tolist()
     return out
 
@@ -120,28 +122,33 @@ def split_sents(text):
 
 
 # ---------- 파이프라인 ----------
-def verify(claim):
+def stages(claim):
+    """단계가 끝날 때마다 (단계 이름, 그 단계 결과)를 낸다. 화면이 단계별로 바로 그릴 수 있게"""
     with lock:
-        t, timing = time.time(), {}
-        def lap(name):
+        t = time.time()
+        def took():
             nonlocal t
-            timing[name] = round(time.time() - t, 2); t = time.time()
+            dt, t = round(time.time() - t, 2), time.time()
+            return dt
 
         cands = bm25(claim)
-        lap('bm25')
         if not cands:
-            return None
+            return
+        yield 'bm25', {'bm25': [nfc(d) for d in cands], 'time': took()}
 
         s1 = score('doc_rerank', [claim] * len(cands), [f'{nfc(d)}. {doc_text(d)}' for d in cands], 256, 'only_second')
         reranked = sorted(zip(cands, s1), key=lambda x: -x[1])
-        lap('rerank')
+        yield 'rerank', {'reranked': [{'title': nfc(d), 'score': round(s, 4)} for d, s in reranked[:K_DOC]], 'time': took()}
 
         pairs = [(a, sa, c) for a, sa in reranked[:B] for c in (mentioned_titles(claim) | doc_mentions(a)) - {a}]
         s2 = score('hop2', [f'{claim} | {nfc(a)}. {nfc(doc_text(a))}' for a, _, _ in pairs],
                    [f'{nfc(c)}. {nfc(doc_text(c))}' for _, _, c in pairs], 256)
         paths = sorted(((sa * p, a, c, sa, p) for (a, sa, c), p in zip(pairs, s2)), key=lambda x: -x[0])
         docs = merge([(a, c) for _, a, c, _, _ in paths], [d for d, _ in reranked])[:K_DOC]
-        lap('hop2')
+        yield 'hop2', {
+            'paths': [{'hop1': nfc(a), 'hop2': nfc(c), 'score': round(s, 4), 'p_hop1': round(sa, 4), 'p_link': round(pl, 4)}
+                      for s, a, c, sa, pl in paths[:5]],
+            'n_hop2_pairs': len(pairs), 'docs': [nfc(d) for d in docs], 'time': took()}
 
         sents = [(d, i, s) for d in docs for i, s in enumerate(split_sents(doc_text(d)))]
         s3 = score('sent_select', [claim] * len(sents), [f'{nfc(d)}. {s}' for d, _, s in sents], 128)
@@ -151,26 +158,22 @@ def verify(claim):
             best.setdefault(x[0][0], x)  # 문서별 1위 문장, 점수 순
         first = list(best.values())[:N_DIV]
         top = (first + [x for x in ranked if x not in first])[:K_SENT]
-        lap('sentence')
+        yield 'sentence', {
+            'n_sents': len(sents),
+            'evidence': [{'title': nfc(d), 'sid': i, 'sent': nfc(s), 'score': round(sc, 4),
+                          'first': ((d, i, s), sc) in first} for (d, i, s), sc in top],
+            'time': took()}
 
         tok, model = models['verifier']
-        enc = tok(claim, ' '.join(s for (_, _, s), _ in top), truncation=True, max_length=384, return_tensors='pt')
+        enc = tok(claim, ' '.join(s for (_, _, s), _ in top), truncation=True, max_length=384, return_tensors='pt').to(DEVICE)
         with torch.inference_mode():
             p = model(**enc).logits.softmax(-1)[0].tolist()
-        lap('verify')
+        yield 'verify', {'label': LABELS[int(p[1] > p[0])], 'prob_supported': round(p[1], 4), 'time': took()}
 
-    return {
-        'claim': claim,
-        'label': LABELS[int(p[1] > p[0])],
-        'prob_supported': round(p[1], 4),
-        'bm25': [nfc(d) for d in cands],
-        'reranked': [{'title': nfc(d), 'score': round(s, 4)} for d, s in reranked[:K_DOC]],
-        'paths': [{'hop1': nfc(a), 'hop2': nfc(c), 'score': round(s, 4), 'p_hop1': round(sa, 4), 'p_link': round(pl, 4)}
-                  for s, a, c, sa, pl in paths[:5]],
-        'n_hop2_pairs': len(pairs),
-        'docs': [nfc(d) for d in docs],
-        'n_sents': len(sents),
-        'evidence': [{'title': nfc(d), 'sid': i, 'sent': nfc(s), 'score': round(sc, 4),
-                      'first': ((d, i, s), sc) in first} for (d, i, s), sc in top],
-        'timing': timing,
-    }
+
+def verify(claim):
+    out = {'claim': claim, 'timing': {}}
+    for name, part in stages(claim):
+        out['timing'][name] = part.pop('time')
+        out.update(part)
+    return out if 'label' in out else None

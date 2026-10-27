@@ -1,0 +1,6 @@
+data/
+node_modules/
+*.tmp
+*.log
+.venv/
+__pycache__/

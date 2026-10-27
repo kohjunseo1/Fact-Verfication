@@ -1,0 +1,20 @@
+[project]
+name = "hover-retrieval"
+version = "0.1.0"
+description = "Entity-seeded best-first search over the 2017 Wikipedia link graph for HoVer"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "torch>=2.3",
+    "sentence-transformers>=3.0",
+    "spacy>=3.8,<3.9",
+    "en_core_web_trf",
+    "tqdm>=4.66",
+    "pandas>=3.0.6",
+]
+
+[tool.uv.sources]
+en_core_web_trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl" }
+
+[tool.uv]
+package = false

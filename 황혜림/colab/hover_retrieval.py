@@ -28,6 +28,8 @@ B = 20                      # documents opened per claim
 M = 5                       # neighbours enqueued per opened document
 MAX_DEPTH = 3
 SIM_FLOOR = 0.70            # min cosine for the title-embedding fallback
+DROP_NORP = True            # skip nationality/group entities (British, Chinese, ...): 0.3% of them were evidence docs
+STRIP_THE = True            # retry title lookup without a leading "the" ("the Ohio River" -> "Ohio River")
 DIRECTION = "both"          # "out" = links leaving a doc only, "both" = also links pointing to it
 M_IN = 3                    # with "both": incoming-link neighbours enqueued per doc, chosen separately
                             # so hub in-links (tens of thousands) cannot crowd out the outgoing links
@@ -217,7 +219,7 @@ import spacy
 
 print("spaCy", spacy.__version__, "on GPU" if spacy.prefer_gpu() else "on CPU (cupy not available)")
 nlp = spacy.load("en_core_web_trf", disable=["parser", "lemmatizer"])
-DROP = {"DATE", "TIME", "PERCENT", "MONEY", "QUANTITY", "ORDINAL", "CARDINAL"}
+DROP = {"DATE", "TIME", "PERCENT", "MONEY", "QUANTITY", "ORDINAL", "CARDINAL"} | ({"NORP"} if DROP_NORP else set())
 MAX_N = 8
 
 claims = json.load(open(f"{BUNDLE}/hover_{SPLIT}_release_v1.1.json", encoding="utf-8"))
@@ -225,8 +227,16 @@ if LIMIT:
     claims = claims[:LIMIT]
 
 
+def lookup_variants(text):
+    """The mention itself, then (STRIP_THE) the mention without a leading "the"."""
+    out = [text]
+    if STRIP_THE and text[:4].lower() == "the " and len(text) > 4:
+        out.append(text[4:])
+    return out
+
+
 def in_dictionary(text):
-    return text in exact_ids or norm_title(text) in norm_ids
+    return any(v in exact_ids or norm_title(v) in norm_ids for v in lookup_variants(text))
 
 
 def ngram_mentions(doc, covered):
@@ -264,12 +274,15 @@ claim_vecs = encode([c["claim"] for c in claims], 256)
 
 
 def resolve_dictionary(text, cvec):
-    if text in exact_ids:
-        return exact_ids[text], "exact"
-    cands = norm_ids.get(norm_title(text))
-    if cands:   # several titles share the loose key: keep the one whose intro is closest to the claim
-        best = cands[int(torch.argmax(PE[cands] @ cvec))] if len(cands) > 1 else cands[0]
-        return best, "loose"
+    variants = lookup_variants(text)
+    for v in variants:                  # exact match first, for every variant
+        if v in exact_ids:
+            return exact_ids[v], "exact" if v == text else "exact-the"
+    for v in variants:
+        cands = norm_ids.get(norm_title(v))
+        if cands:   # several titles share the loose key: keep the one whose intro is closest to the claim
+            best = cands[int(torch.argmax(PE[cands] @ cvec))] if len(cands) > 1 else cands[0]
+            return best, "loose" if v == text else "loose-the"
     return None, None
 
 
@@ -375,7 +388,8 @@ os.makedirs(f"{BUNDLE}/results", exist_ok=True)
 in_part = ""
 if DIRECTION == "both":
     in_part = f"_in{M_IN}" + (f"d{IN_MAX_DEPTH}" if IN_MAX_DEPTH < MAX_DEPTH - 1 else "")
-tag = f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}{in_part}_floor{SIM_FLOOR}"
+seed_part = ("_s" + ("n" if DROP_NORP else "") + ("t" if STRIP_THE else "")) if (DROP_NORP or STRIP_THE) else ""
+tag = f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}{in_part}_floor{SIM_FLOOR}{seed_part}"
 with open(f"{BUNDLE}/results/{tag}.jsonl", "w", encoding="utf-8") as f:
     for c, m, s, r in zip(claims, mentions, seeds, results):
         f.write(json.dumps({

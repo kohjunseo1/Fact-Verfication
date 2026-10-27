@@ -57,26 +57,32 @@ HoVer 2-hop 실패의 대부분은 ②, 즉 claim에 이름이 직접 나오지 
 
 ## 3. 팀원별 상세 분석
 
+파이프라인 그림 색: **파란색 = HoVer train으로 학습한 단계**, 회색 = 학습 없음(규칙·검색·사전학습 모델 그대로).
+
 ### 3.1 고준서 — 학습 기반 k-hop beam search
 
 위치: [고준서/e2e_v2/](../고준서/e2e_v2/)
 
 #### 구조
 
-1. **문서 재순위** ([retrieval.py](../고준서/e2e_v2/src/hover_e2e/retrieval.py))
-   공식 TF-IDF top-100을 roberta-base cross-encoder로 재정렬. 정답 문서를 positive, TF-IDF 오답 12개를 hard negative로 학습.
-2. **Multi-hop beam** ([multihop.py](../고준서/e2e_v2/src/hover_e2e/multihop.py))
-   - 재정렬 상위 3개 문서를 seed로 사용
-   - 현재 경로 문서 본문과 claim에 등장하는 위키 제목(약 500만 개 제목 인덱스)을 다음 hop 후보로 추출
-   - `(claim + 경로 전체 문맥, 후보 문서)`를 RoBERTa로 채점, beam width 5로 확장
-   - 경로 점수 = `0.7 × 이전 경로 점수 + log P(후보)`
-   - 목표 hop 수까지 반복하므로 **3/4-hop에 같은 코드가 동작**
-   - 학습은 정답 순서와 역순 모두로 teacher forcing
-   - 후보 채점 상한(문서당 100, depth당 250, claim당 600)으로 연산 폭주 방지
-3. **문장 선택** ([evidence.py](../고준서/e2e_v2/src/hover_e2e/evidence.py))
-   top-5 문서의 문장을 RoBERTa로 채점, 공식 채점 규칙에 맞춰 문서당 최대 2문장.
-4. **판정** ([verifier.py](../고준서/e2e_v2/src/hover_e2e/verifier.py))
-   roberta-base, 검색 근거 5문장 입력, 4 epoch, 내부 val macro-F1 최고 checkpoint. 정답 근거 혼합(`gold_mix_ratio`)은 기본 0.
+코드: [retrieval.py](../고준서/e2e_v2/src/hover_e2e/retrieval.py) → [multihop.py](../고준서/e2e_v2/src/hover_e2e/multihop.py) → [evidence.py](../고준서/e2e_v2/src/hover_e2e/evidence.py) → [verifier.py](../고준서/e2e_v2/src/hover_e2e/verifier.py)
+
+```mermaid
+flowchart LR
+    C([claim]) --> T["TF-IDF<br/>공식 top-100"]
+    T --> R["문서 재정렬<br/>roberta-base<br/>hard negative 12개"]
+    R --> S["상위 3개 문서<br/>= seed 경로"]
+    S --> N["다음 hop 후보<br/>경로 본문·claim에 나온<br/>위키 제목 (약 500만)"]
+    N --> B["경로 채점 RoBERTa<br/>(claim + 경로 문맥, 후보)<br/>0.7×이전 + log P, beam 5"]
+    B -->|"목표 hop 수까지 반복<br/>(3/4-hop 공통 코드)"| N
+    B --> E["문장 선택 RoBERTa<br/>top-5 문서, 문서당 ≤2"]
+    E --> V["판정 roberta-base<br/>근거 5문장, 4 epoch"]
+    V --> L([SUPPORTED / NOT_SUPPORTED])
+    class R,B,E,V trained
+    class T,S,N rule
+    classDef trained fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef rule fill:#f3f4f6,stroke:#9ca3af,color:#374151
+```
 
 #### 강점
 
@@ -117,12 +123,21 @@ HoVer 2-hop 실패의 대부분은 ②, 즉 claim에 이름이 직접 나오지 
 
 #### v6 구조 ([HoVer_v6_Training.ipynb](../이상민/v6/Colab/HoVer_v6_Training.ipynb))
 
-1. **Hop 1**: TF-IDF top-50 문서의 모든 문장을 사전학습 MiniLM cross-encoder(**zero-shot**)로 채점 → top-5 문장
-2. **Hop 2**:
-   - claim과 hop-1 문장에서 spaCy로 PERSON/ORG/GPE/LOC/FAC 개체 추출
-   - SQLite에서 제목을 exact / prefix(`GLOB`) 검색
-   - 해당 문서 문장들을 `claim + hop1 근거`를 query로 재채점 → hop-1 중복 제외 top-5
-3. **판정**: MiniLM-L6 cross-encoder, 입력 = hop1 5문장 + hop2 5문장, oversampling, 1 epoch, threshold 0.60
+```mermaid
+flowchart LR
+    C([claim]) --> T["TF-IDF<br/>top-50 문서"]
+    T --> H1["hop 1 문장 채점<br/>MiniLM cross-encoder<br/>(zero-shot) → top-5"]
+    H1 --> X["개체 추출 spaCy<br/>claim + hop 1 문장<br/>PERSON/ORG/GPE/LOC/FAC"]
+    X --> Q["제목 검색 SQLite<br/>exact / prefix"]
+    Q --> H2["hop 2 문장 채점<br/>MiniLM (zero-shot)<br/>query = claim + hop 1 근거<br/>중복 제외 top-5"]
+    H2 --> V["판정 MiniLM-L6<br/>hop1 5 + hop2 5문장<br/>oversampling, threshold 0.60"]
+    H1 --> V
+    V --> L([SUPPORTED / NOT_SUPPORTED])
+    class V trained
+    class T,H1,X,Q,H2 rule
+    classDef trained fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef rule fill:#f3f4f6,stroke:#9ca3af,color:#374151
+```
 
 #### 강점
 
@@ -151,13 +166,21 @@ HoVer 2-hop 실패의 대부분은 ②, 즉 claim에 이름이 직접 나오지 
 
 #### 구조 (실행 순서 `02 → 05 → 08 → 06 → 07`)
 
-1. **05 문서 재순위**: TF-IDF 후보를 roberta-base로 재정렬 (v3에서 추론 후보 20 → 100개, 학습은 20개 유지)
-2. **08 Multi-hop**:
-   - 재정렬 top-2 문서를 hop 1로 사용
-   - hop 2 후보 = claim과 hop 1 본문에 언급된 위키 제목 (괄호 제거 소문자 n-gram 사전, 약 480만 개)
-   - `(claim | hop1 내용, 후보)`를 RoBERTa로 채점, 경로 점수 `P(a) × P(c|a)`로 순위 생성
-3. **06 문장 선택**: top-5 문서 문장을 RoBERTa로 선택
-4. **07 판정**: roberta-base, 클래스 가중치, 검색 근거로 학습 (정답 근거 아님)
+```mermaid
+flowchart LR
+    C([claim]) --> T["TF-IDF<br/>후보 100개"]
+    T --> R["05 문서 재정렬<br/>roberta-base"]
+    R --> H1["top-2 문서<br/>= hop 1"]
+    H1 --> N["hop 2 후보<br/>claim·hop 1 본문에 나온<br/>위키 제목 (약 480만)"]
+    N --> B["08 hop 2 채점 RoBERTa<br/>(claim | hop 1, 후보)<br/>P(a) × P(c|a)"]
+    B --> E["06 문장 선택 RoBERTa<br/>top-5 문서, 근거 10개"]
+    E --> V["07 판정 roberta-base<br/>클래스 가중치<br/>검색 근거로 학습"]
+    V --> L([SUPPORTED / NOT_SUPPORTED])
+    class R,B,E,V trained
+    class T,H1,N rule
+    classDef trained fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef rule fill:#f3f4f6,stroke:#9ca3af,color:#374151
+```
 
 #### 성능 (공식 dev 2-hop 1,126건)
 
@@ -191,14 +214,19 @@ v3 행은 노트북 출력으로 확인한 값이고, 나머지 행은 가이드
 
 #### 구조
 
-1. **문서 후보**: TF-IDF 미사용. spaCy `en_core_web_trf` 개체 + 제목 사전 n-gram으로 시작 문서 연결 (정확 일치 → 소문자·괄호 제거 일치 → 제목 임베딩, 코사인 0.70 미만 제외)
-2. **Multi-hop**: HotpotQA 첫 단락 **하이퍼링크 그래프**(노드 523만, 링크 2,300만)를 직접 구축해 best-first 탐색
-   - MiniLM 임베딩, 최대 깊이 3
-   - 나가는 링크 상위 5 + 들어오는 링크 상위 3 (들어오는 링크는 시작 문서에서만)
-   - 문서 20개 열람
-   - **학습하지 않은 zero-shot 단계**
-3. **문장 선택**: MiniLM cross-encoder를 HoVer train으로 fine-tune, hybrid threshold 규칙(확률 0.9 이상 + 근거 없는 문서는 0.4 이상 최고 문장 1개 구제). train 근거는 2-fold 교차 예측으로 만들어 판정기가 dev와 같은 품질의 근거로 학습되게 했다.
-4. **판정**: HoVer 공식 레시피 그대로 (bert-base-uncased, 길이 200, claim ≤ 60토큰, lr 3e-5, 배치 4×2, 3,000 step)
+```mermaid
+flowchart LR
+    C([claim]) --> X["개체 + 제목 n-gram<br/>spaCy en_core_web_trf<br/>(TF-IDF 없음)"]
+    X --> S["시작 문서 연결<br/>정확 일치 → 정규화 일치<br/>→ 제목 임베딩 ≥ 0.70"]
+    S --> G["하이퍼링크 그래프 best-first<br/>노드 523만·링크 2,300만<br/>MiniLM 임베딩, 깊이 ≤3<br/>out 5 + in 3, 문서 20개"]
+    G --> E["문장 선택<br/>MiniLM cross-encoder fine-tune<br/>hybrid threshold 0.9 / 구제 0.4<br/>train 근거는 2-fold 교차 예측"]
+    E --> V["판정 bert-base-uncased<br/>HoVer 공식 레시피<br/>길이 200, 3,000 step"]
+    V --> L([SUPPORTED / NOT_SUPPORTED])
+    class E,V trained
+    class X,S,G rule
+    classDef trained fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef rule fill:#f3f4f6,stroke:#9ca3af,color:#374151
+```
 
 #### 성능 (공식 dev, README 기록값)
 

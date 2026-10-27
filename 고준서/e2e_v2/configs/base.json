@@ -1,0 +1,84 @@
+{
+  "schema_version": 2,
+  "seed": 42,
+  "data": {
+    "train_claims": "raw/hover_train_release_v1.1.json",
+    "dev_claims": "raw/hover_dev_release_v1.1.json",
+    "train_tfidf": "retrieval/train_tfidf_doc_retrieval_results.json",
+    "dev_tfidf": "retrieval/dev_tfidf_doc_retrieval_results.json",
+    "wiki_db": "raw/wiki_wo_links.db",
+    "title_index": "artifacts/wiki_title_index.sqlite",
+    "sentence_cache": "artifacts/02_corenlp_sentence_cache_v2.sqlite",
+    "sentence_overrides": "artifacts/02_verified_reference_overrides_offline.json",
+    "alignment_audit": "artifacts/02_sentence_alignment_diagnostics.json",
+    "reference_alignment_audit": "artifacts/02_reference_candidate_audit.json",
+    "gold_sentence_reference": "artifacts/02_gold_sentence_alignment.jsonl"
+  },
+  "split": {
+    "validation_fraction": 0.1,
+    "group_key": "hpqa_id"
+  },
+  "retrieval": {
+    "model_name": "roberta-base",
+    "tfidf_k": 100,
+    "train_hard_negatives": 12,
+    "max_length": 384,
+    "epochs": 2,
+    "learning_rate": 2e-5,
+    "train_batch_size": 8,
+    "gradient_accumulation_steps": 2,
+    "eval_batch_size": 32,
+    "rank_k": 20
+  },
+  "multihop": {
+    "model_name": "roberta-base",
+    "seed_docs": 3,
+    "beam_width": 5,
+    "candidate_limit": 100,
+    "max_scored_candidates": 600,
+    "max_scored_per_depth": 250,
+    "runtime_sample_size": 20,
+    "max_title_ngram": 8,
+    "max_titles_per_surface": 8,
+    "source_max_chars": 12000,
+    "train_hard_negatives": 10,
+    "max_length": 384,
+    "epochs": 2,
+    "learning_rate": 2e-5,
+    "train_batch_size": 6,
+    "gradient_accumulation_steps": 2,
+    "eval_batch_size": 32,
+    "path_score_alpha": 0.7
+  },
+  "evidence": {
+    "model_name": "roberta-base",
+    "documents": 5,
+    "sentences_per_document": 2,
+    "save_top_k": 12,
+    "train_hard_negatives_per_positive": 5,
+    "max_length": 256,
+    "epochs": 2,
+    "learning_rate": 2e-5,
+    "train_batch_size": 12,
+    "gradient_accumulation_steps": 2,
+    "eval_batch_size": 64,
+    "known_alignment_issue_claims": 86
+  },
+  "verifier": {
+    "model_name": "roberta-base",
+    "retrieved_sentences": 5,
+    "gold_mix_ratio": 0.0,
+    "max_length": 512,
+    "epochs": 4,
+    "learning_rate": 2e-5,
+    "train_batch_size": 8,
+    "gradient_accumulation_steps": 2,
+    "eval_batch_size": 32
+  },
+  "evaluation": {
+    "document_ks": [3, 4, 5, 10, 20, 100],
+    "evidence_submit_ks": [2, 3, 4, 5, 8, 10, 12],
+    "hop_order": [2, 3, 4],
+    "expected_dev_by_hop": {"2": 1126, "3": 1835, "4": 1039}
+  }
+}

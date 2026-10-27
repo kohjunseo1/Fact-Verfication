@@ -49,6 +49,21 @@
   .path b { font-weight: 600; }
   .ev { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; }
   .ev .t { font-size: 13px; color: var(--accent); }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; font-size: 13px; }
+  .flow .in { border: 1px dashed var(--muted); border-radius: 6px; padding: 2px 8px; }
+  .flow .model { background: var(--accent); color: #fff; border-radius: 6px; padding: 2px 8px; font-weight: 600; }
+  .flow .model.rule { background: var(--muted); }
+  .flow .outp { border: 1px solid var(--accent); color: var(--accent); border-radius: 6px; padding: 2px 8px; }
+  .flow .op { color: var(--muted); }
+  .how { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .mbar { display: inline-block; width: 56px; height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-left: 8px; }
+  .mbar span { display: block; height: 100%; background: var(--accent); }
+  .tag { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  .split { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin: 4px 0 6px; }
+  .split .no { background: var(--bad); }
+  .split .yes { background: var(--ok); }
+  details { margin-top: 10px; font-size: 13px; }
+  details pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 6px 0 0; font: 12px/1.5 ui-monospace, Menlo, monospace; }
   .err { color: var(--bad); }
   a { color: var(--accent); }
 </style>
@@ -110,40 +125,73 @@ async function run() {
   }
 }
 
+// 모델이 본 입력(점선) → 모델(파랑, 학습 없는 규칙은 회색) → 낸 값
+const flow = (inputs, model, out, rule = false) =>
+  `<div class="flow">${inputs.map(i => `<span class="in">${i}</span>`).join('<span class="op">+</span>')}` +
+  `<span class="op">→</span><span class="model ${rule ? 'rule' : ''}">${model}</span><span class="op">→</span><span class="outp">${out}</span></div>`;
+const bar = x => `<span class="mbar"><span style="width:${pct(x)}"></span></span>`;
+const sc = x => `<span class="score">${x.toFixed(3)}</span>${bar(x)}`;
+
 function render(d) {
   const ok = d.label === 'SUPPORTED';
   const docs = new Set(d.docs);
   const t = d.timing;
+  const p1 = d.prob_supported, p0 = 1 - p1;
+  const context = d.evidence.map(e => e.sent).join(' ');
   $('out').innerHTML = `
     <div class="card verdict">
       <span class="badge ${ok ? 'ok' : 'bad'}">${d.label}</span>
       <div class="meter">
-        <div class="muted">SUPPORTED 확률 ${pct(d.prob_supported)}</div>
-        <div class="track"><div class="fill" style="width:${pct(d.prob_supported)}"></div></div>
+        <div class="muted">SUPPORTED 확률 ${pct(p1)}</div>
+        <div class="track"><div class="fill" style="width:${pct(p1)}"></div></div>
       </div>
     </div>
 
     <div class="card">
-      <h2><span class="step">4</span> 근거 문장 top-${d.evidence.length} <span class="score">문장 선택 ${t.sentence}s · 판정 ${t.verify}s</span></h2>
-      ${d.evidence.map(e => `
-        <div class="ev"><div class="t"><a href="${wiki(e.title)}" target="_blank" rel="noopener">${esc(e.title)}</a> · 문장 ${e.sid}<span class="score">${e.score.toFixed(3)}</span></div>${esc(e.sent)}</div>`).join('')}
-    </div>
-
-    <div class="card">
-      <h2><span class="step">3</span> Multi-hop 경로 (hop 1 → hop 2) <span class="score">후보 ${d.n_hop2_pairs}쌍 · ${t.hop2}s</span></h2>
-      <ol>${d.paths.map(p => `<li class="path"><b>${esc(p.hop1)}</b> → <b>${esc(p.hop2)}</b><span class="score">${p.score.toFixed(3)}</span></li>`).join('') || '<li class="muted">경로 없음</li>'}</ol>
-      <p class="muted" style="margin:10px 0 0">문장을 고를 문서 ${d.docs.length}개: ${d.docs.map(esc).join(', ')}</p>
+      <h2><span class="step">1</span> BM25 후보 ${d.bm25.length}개 <span class="score">${t.bm25}s</span></h2>
+      ${flow(['주장의 단어'], 'BM25 (학습 없음)', `위키 문서 ${d.bm25.length}개`, true)}
+      <p class="how">주장의 단어가 많이, 드물게 겹치는 문서일수록 위로. 뜻은 보지 않고 글자만 맞춘다.</p>
+      <div class="chips">${d.bm25.map(b => `<span class="chip ${docs.has(b) ? 'on' : ''}">${esc(b)}</span>`).join('')}</div>
+      <p class="muted" style="margin:8px 0 0">파란 테두리 = 최종 문서 5개에 들어간 문서</p>
     </div>
 
     <div class="card">
       <h2><span class="step">2</span> 문서 재정렬 top-${d.reranked.length} <span class="score">${t.rerank}s</span></h2>
-      <ol>${d.reranked.map(r => `<li>${esc(r.title)}<span class="score">${r.score.toFixed(3)}</span></li>`).join('')}</ol>
+      ${flow(['주장', '문서 제목 + 본문 앞부분'], 'doc_rerank', 'P(관련 문서)')}
+      <p class="how">후보 ${d.bm25.length}개를 하나씩 주장과 같이 읽고 "주장에 필요한 문서일 확률"을 매긴다. 문서끼리 경쟁하지 않아 합이 1이 아니다.</p>
+      <ol>${d.reranked.map(r => `<li>${esc(r.title)}${sc(r.score)}</li>`).join('')}</ol>
     </div>
 
     <div class="card">
-      <h2><span class="step">1</span> BM25 후보 ${d.bm25.length}개 <span class="score">${t.bm25}s</span></h2>
-      <div class="chips">${d.bm25.map(b => `<span class="chip ${docs.has(b) ? 'on' : ''}">${esc(b)}</span>`).join('')}</div>
-      <p class="muted" style="margin:8px 0 0">파란 테두리 = 최종 문서 5개에 들어간 문서</p>
+      <h2><span class="step">3</span> Multi-hop 경로 (hop 1 → hop 2) <span class="score">후보 ${d.n_hop2_pairs}쌍 · ${t.hop2}s</span></h2>
+      ${flow(['주장 | hop 1 문서', 'hop 2 후보 문서'], 'hop2', 'P(이어지는 문서)')}
+      <p class="how">2단계 상위 문서(hop 1)와 그 본문에 이름이 나온 문서(hop 2)를 짝지어 채점. 경로 점수 = hop 1 확률 × 연결 확률.</p>
+      <ol>${d.paths.map(p => `<li class="path"><b>${esc(p.hop1)}</b> → <b>${esc(p.hop2)}</b>
+        <span class="score">${p.p_hop1.toFixed(2)} × ${p.p_link.toFixed(2)} =</span>${sc(p.score)}</li>`).join('') || '<li class="muted">경로 없음</li>'}</ol>
+      <p class="muted" style="margin:10px 0 0">문장을 고를 문서 ${d.docs.length}개: ${d.docs.map(esc).join(', ')}</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">4</span> 근거 문장 top-${d.evidence.length} <span class="score">후보 ${d.n_sents}문장 · ${t.sentence}s</span></h2>
+      ${flow(['주장', '문서 제목. 문장 하나'], 'sent_select', 'P(근거 문장)')}
+      <p class="how">위 문서 ${d.docs.length}개의 문장 ${d.n_sents}개를 하나씩 채점. 서로 다른 문서의 1위 문장을 먼저 넣고 나머지는 점수 순.</p>
+      ${d.evidence.map(e => `
+        <div class="ev"><div class="t"><a href="${wiki(e.title)}" target="_blank" rel="noopener">${esc(e.title)}</a> · 문장 ${e.sid}${e.first ? '<span class="tag">문서별 1위</span>' : ''}${sc(e.score)}</div>${esc(e.sent)}</div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h2><span class="step">5</span> 판정 <span class="score">${t.verify}s</span></h2>
+      ${flow(['주장', `근거 ${d.evidence.length}문장 이어 붙임`], 'verifier', '두 칸 확률 → 큰 쪽')}
+      <p class="how">근거를 한꺼번에 읽고 두 칸에 점수를 매긴다. 두 칸이 경쟁하므로 합이 1.</p>
+      <div class="split">
+        <div class="no" style="width:${pct(p0)}"></div>
+        <div class="yes" style="width:${pct(p1)}"></div>
+      </div>
+      <div class="row" style="justify-content:space-between;margin:0;font-size:13px;font-weight:600">
+        <span style="color:var(--bad)">0 · NOT_SUPPORTED ${pct(p0)}</span><span style="color:var(--ok)">1 · SUPPORTED ${pct(p1)}</span>
+      </div>
+      <details><summary>모델이 실제로 읽은 글</summary><pre>${esc(d.claim)}\n[SEP]\n${esc(context)}</pre>
+        <p class="muted">384토큰을 넘으면 뒷부분은 잘려서 모델이 보지 못한다.</p></details>
     </div>`;
 }
 </script>
